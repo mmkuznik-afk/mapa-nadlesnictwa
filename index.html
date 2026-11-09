@@ -183,7 +183,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .seg button.on{background:var(--acc);color:var(--on-acc);font-weight:600}
 .szuk{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card);font-size:16px}
 .wyn{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 4px;cursor:pointer}
-#mapa{overflow:hidden}#mapa #svg{inset:auto;left:-20%;top:-20%;width:140%;height:140%;will-change:transform;transform-origin:50% 50%}#svg.ruch #l-labW,#svg.ruch #l-labO,#svg.ruch #l-grLab,#svg.ruch #l-mojeLab,#svg.ruch #l-szkD,#svg.ruch .oddz2{display:none !important}
+.gps-a{fill:#ff00c8;fill-opacity:.14;stroke:#d100a4;stroke-opacity:.75}.gps-p,.gps-s{fill:#ff00c8;stroke:#3d0033;stroke-width:1.8}.gps-r{stroke:#ff00c8;stroke-width:2.6}#bGps.on{background:#d100a4;border-color:#d100a4}#bGps.pol{background:#ffd9f6;color:#7a0062;border-color:#d100a4}#mapa{overflow:hidden}#mapa #svg{inset:auto;left:-20%;top:-20%;width:140%;height:140%;will-change:transform;transform-origin:50% 50%}#svg.ruch #l-labW,#svg.ruch #l-labO,#svg.ruch #l-grLab,#svg.ruch #l-mojeLab,#svg.ruch #l-szkD,#svg.ruch .oddz2{display:none !important}
 </style>
 </head><body>
 <input type="file" id="plik" hidden><input type="file" id="plikW" multiple hidden>
@@ -1381,7 +1381,7 @@ function mierzPrzelacz(){
 function mierzGps(){
   if (!GPS.p){
     if (GPS.id == null) gpsPrzelacz();
-    pokazGdzie('📍 Czekam na GPS. Dotknij „tu stoję” jeszcze raz, gdy pojawi się turkusowa kropka.', true); return;
+    pokazGdzie('📍 Czekam na GPS. Dotknij „tu stoję” jeszcze raz, gdy pojawi się różowa kropka.', true); return;
   }
   MI.pts.push([GPS.p.x, GPS.p.y, accPom()]); rysujMier();
 }
