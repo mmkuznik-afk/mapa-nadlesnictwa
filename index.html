@@ -183,6 +183,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .seg button.on{background:var(--acc);color:var(--on-acc);font-weight:600}
 .szuk{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card);font-size:16px}
 .wyn{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 4px;cursor:pointer}
+#svg{will-change:transform;transform-origin:50% 50%}#svg.ruch #l-labW,#svg.ruch #l-labO,#svg.ruch #l-grLab,#svg.ruch #l-mojeLab,#svg.ruch #l-szkD,#svg.ruch .oddz2{display:none !important}
 </style>
 </head><body>
 <input type="file" id="plik" hidden><input type="file" id="plikW" multiple hidden>
@@ -824,7 +825,7 @@ function budujUklad(){
   document.getElementById('app').innerHTML = `
   <div id='mapa'><svg id='svg' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMidYMid meet'>
     <defs><clipPath id='granica'>${G.les.map(f => `<path d='${f.d}'/>`).join('')}</clipPath></defs>
-    <g id='l-pzS' clip-path='url(#granica)'></g><g id='l-wydz'></g><g id='l-pzO' clip-path='url(#granica)'></g><g id='l-szkP'></g><g id='l-cieki' clip-path='url(#granica)'></g><g id='l-drogi' clip-path='url(#granica)'></g><g id='l-pzD' clip-path='url(#granica)'></g>
+    <g id='l-pzS'></g><g id='l-wydz'></g><g id='l-pzO'></g><g id='l-szkP'></g><g id='l-cieki'></g><g id='l-drogi'></g><g id='l-pzD'></g>
     <g id='l-oddz'></g><g id='l-les'></g><g id='l-szkL'></g><g id='l-war'></g><g id='l-sel'></g><g id='l-szkD'></g><g id='l-pzI'></g><g id='l-gr'></g><g id='l-pk'></g><g id='l-moje'></g><g id='l-wyb'></g><g id='l-mier'></g>
     <g id='l-labW' class='lab'></g><g id='l-grLab' class='lab lab-g'></g><g id='l-mojeLab' class='lab lab-m'></g><g id='l-labO' class='lab lab-o'></g><g id='l-cel'></g><g id='l-gps'></g>
   </svg></div>
@@ -1043,13 +1044,18 @@ function rysujSel(){
 }
 
 // ---- widok: przesuwanie palcem, szczypanie, kółko myszy -----------------------------------------
-function rozmiar(){ const r = document.getElementById('mapa').getBoundingClientRect(); return {l:r.left, t:r.top, w:r.width || window.innerWidth || 400, h:r.height || window.innerHeight || 700}; }
+function rozmiar(){ if (window.__ruch && rozmiar.c) return rozmiar.c; const r = document.getElementById('mapa').getBoundingClientRect(); return (rozmiar.c = {l:r.left, t:r.top, w:r.width || window.innerWidth || 400, h:r.height || window.innerHeight || 700}); }
 let odswiezZaplanowane = false;
+let VB0 = null;
+function ruch(){ const s = document.getElementById('svg'); if (!s) return; if (!window.__ruch) rozmiar.c = null; s.classList.add('ruch'); window.__ruch = true; clearTimeout(ruch.t); ruch.t = setTimeout(() => { window.__ruch = false; window.__zoom = false; s.classList.remove('ruch'); ustawWidok(); podpisy(); }, 220); }
+function zoomRuch(){ window.__zoom = true; ruch(); }
 function ustawWidok(){
   const svg = document.getElementById('svg'); if (!svg) return;
   const r = rozmiar(), w = r.w * V.m, h = r.h * V.m;
+  if (window.__zoom && VB0){ svg.style.transform = `translate(${((VB0.cx - V.cx) / V.m).toFixed(2)}px,${((V.cy - VB0.cy) / V.m).toFixed(2)}px) scale(${(VB0.m / V.m).toFixed(5)})`; return; }
+  svg.style.transform = ''; VB0 = {cx:V.cx, cy:V.cy, m:V.m};
   svg.setAttribute('viewBox', `${(V.cx - w / 2).toFixed(2)} ${(-V.cy - h / 2).toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)}`);
-  if (!odswiezZaplanowane){ odswiezZaplanowane = true; requestAnimationFrame(() => { odswiezZaplanowane = false; podpisy(); rysujGps(); }); }
+  if (!odswiezZaplanowane){ odswiezZaplanowane = true; requestAnimationFrame(() => { odswiezZaplanowane = false; if (!window.__ruch) podpisy(); rysujGps(); }); }
 }
 // napisy w stałym rozmiarze na ekranie; litery wydzieleń dopiero po przybliżeniu
 function podpisy(){
@@ -1087,7 +1093,7 @@ function zoomW(fk, px, py){
   V.cx = wx - (px - r.l - r.w / 2) * V.m; V.cy = wy + (py - r.t - r.h / 2) * V.m;
   ustawWidok();
 }
-function zoomKrok(fk){ V.m = ogr(V.m * fk); ustawWidok(); }
+function zoomKrok(fk){ zoomRuch(); V.m = ogr(V.m * fk); ustawWidok(); }
 function dopasuj(bb, zapas = 1.08){
   if (!bb || !isFinite(bb[0])) return;
   const r = rozmiar(), w = Math.max(bb[2] - bb[0], 40), h = Math.max(bb[3] - bb[1], 40);
@@ -1098,7 +1104,8 @@ function dopasuj(bb, zapas = 1.08){
 function podepnijMape(){
   const km = document.getElementById('mapa'), pts = new Map();
   let drag = null, pinch = null;
-  km.addEventListener('wheel', e => { e.preventDefault(); zoomW(e.deltaY < 0 ? 1 / 1.2 : 1.2, e.clientX, e.clientY); }, {passive:false});
+  km.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') ruch(); });
+  km.addEventListener('wheel', e => { e.preventDefault(); zoomRuch(); zoomW(e.deltaY < 0 ? 1 / 1.2 : 1.2, e.clientX, e.clientY); }, {passive:false});
   const startDrag = (x, y) => { drag = {x, y, cx:V.cx, cy:V.cy, ruch:false}; };
   km.addEventListener('pointerdown', e => {
     e.preventDefault();
@@ -1115,7 +1122,7 @@ function podepnijMape(){
     if (pinch && pts.size === 2){
       const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, r = rozmiar();
       if (d < 10) return;
-      V.m = ogr(pinch.m * pinch.d / d);
+      zoomRuch(); V.m = ogr(pinch.m * pinch.d / d);
       V.cx = pinch.w[0] - (mx - r.l - r.w / 2) * V.m; V.cy = pinch.w[1] + (my - r.t - r.h / 2) * V.m;
       if (GPS.sledz){ GPS.sledz = false; odswiezGpsBtn(); }
       ustawWidok();
