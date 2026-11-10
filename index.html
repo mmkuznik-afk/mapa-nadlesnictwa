@@ -733,14 +733,15 @@ function zipSklej(mapa){
   ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, n, true); ev.setUint16(10, n, true); ev.setUint32(12, cdl, true); ev.setUint32(16, off, true);
   return new Blob([...cz, ...cd, ev]);
 }
-async function wczytaj(file, zapamietaj){
+const MODEL_W = 'c3c299c0d606';
+async function wczytaj(file, zapamietaj, P){
   try {
     stan('Czytam ' + file.name + '…');
     const buf = file, zebr = new Map();   // zebr: pliki naprawdę wyjęte z ZIP-a, do zapamiętania zamiast całej paczki
     let nazwaWyj = '';
     const wyj = async (re, ustaw) => { const r = await zipWyjmijN(buf, re); if (!r) return null; zebr.set(r.name, r.data); if (ustaw) nazwaWyj = r.name; return r.data; };
     let dbB = null;
-    if (!dbB){
+    if (!P && !dbB){
       const dbs = (await zipSpis(buf)).map(x => x.name).filter(n => /(^|\/)SILP\.db$/.test(n));
       if (!dbs.length) throw new Error('W tym ZIP-ie nie ma pliku SILP.db. Czy to paczka mLasa?');
       let wyb = dbs[0];
@@ -753,16 +754,22 @@ async function wczytaj(file, zapamietaj){
       dbB = await wyj(new RegExp('^' + wyb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), true);
     }
     const folder = nazwaWyj.replace(/SILP\.db$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    M = zbuduj(new Sqlite(dbB));
+    if (P){ M = P.M; NAZLES = P.naz || {}; } else M = zbuduj(new Sqlite(dbB));
     const L = async n => {
       const sh = await wyj(new RegExp('^' + folder + n + '\\.shp$', 'i')), db = await wyj(new RegExp('^' + folder + n + '\\.dbf$', 'i'));
       if (!sh || !db) return [];
       const g = czytajShp(sh), a = czytajDbf(db);
       return przygotuj(g.map((x, i) => ({g:x, a:a[i] || {}})).filter(f => f.g && !f.a._usun && !(f.g.rings && !f.g.rings.length)));   // puste szkice z mLasa (5.11) wywracały wczytanie
     };
-    const [wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt] = await Promise.all(['wydz_pol', 'oddz_pol', 'les_pol', 'kom_lin', 'ciek_lin', 'gr_pkt', 'szkic_pol', 'szkic_lin', 'szkic_pkt', 'szkic_pnsw',
+    const [wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt] = P ? P.lay : await Promise.all(['wydz_pol', 'oddz_pol', 'les_pol', 'kom_lin', 'ciek_lin', 'gr_pkt', 'szkic_pol', 'szkic_lin', 'szkic_pkt', 'szkic_pnsw',
       'sied_pol', 'ocp_pol', 'oprz_pol', 'g_droga', 'komp_lin', 'g_obinfr', 'ol_pkt'].map(L));
     if (!wydz.length) throw new Error('W paczce nie ma warstwy wydzieleń (wydz_pol). Potrzebny pełny ZIP z mLasa.');
+    // zapis modelu jako tekst JSON (w Blobie), zanim cokolwiek do obiektów dopiszemy. JSON, a nie zapis obiektów wprost:
+    // obiekty odtworzone przez IndexedDB zajmowały w pamięci ok. 560 MB, po JSON.parse ok. 6 razy mniej
+    if (!P){ try {
+      const js = JSON.stringify({M, naz:NAZLES, lay:[wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt]}, (k, v) => v instanceof Float64Array ? Array.from(v) : v);
+      const bz = await idb(); bz.transaction('p', 'readwrite').objectStore('p').put({w:MODEL_W, nazwa:file.name, mod:file.lastModified, js:new Blob([js])}, 'model');
+    } catch (e) { console.warn('Nie zapamiętano modelu', e); } }
     G = {wydz:[], oddz:[], les, drogi, cieki, W:new Map(), O:new Map()};
     for (const f of wydz){
       f.k = klucz(f.a.adr_les);
@@ -851,37 +858,51 @@ function budujUklad(){
 }
 function rysujPodklad(){
   const pth = (l, c) => l.map(f => `<path class='${c}' d='${f.d}'/>`).join('');
+  const kaf = (l, c) => { const m = new Map(); for (const f of l){ const k = Math.floor((f.bb[0] + f.bb[2]) / 6000) + '_' + Math.floor((f.bb[1] + f.bb[3]) / 6000); m.set(k, (m.get(k) || '') + f.d); } return [...m.values()].map(d => `<path class='${c}' d='${d}'/>`).join(''); };
   const lw = document.getElementById('l-wydz');
   lw.innerHTML = G.wydz.map(f => `<path class='w' d='${f.d}'/>`).join('');
-  G.wydz.forEach((f, i) => f.el = lw.children[i]);
-  document.getElementById('l-cieki').innerHTML = pth(G.cieki, 'ciek');
-  document.getElementById('l-drogi').innerHTML = pth(G.drogi, 'droga');
+  G.wydz.forEach((f, i) => { f.el = lw.children[i]; f.kol = ''; });
+  document.getElementById('l-cieki').innerHTML = kaf(G.cieki, 'ciek');
+  document.getElementById('l-drogi').innerHTML = kaf(G.drogi, 'droga');
   // granica dwóch oddziałów leży w pliku dwa razy (po jednym na sąsiada); rysowana dwa razy dawała przesunięte kreski, więc każdy odcinek biorę raz
-  { const seen = new Set(), kk = (x, y) => x.toFixed(1) + ',' + y.toFixed(1); let dd = '';
-    for (const f of G.oddz) for (const r of f.g.rings){ let bieg = false;
+  { const seen = new Set(), kk = (x, y) => x.toFixed(1) + ',' + y.toFixed(1), kafle = new Map();
+    for (const f of G.oddz) for (const r of f.g.rings){ let bieg = false, dd = '';
       for (let i = 0; i + 3 < r.length; i += 2){
         const a = kk(r[i], r[i + 1]), b = kk(r[i + 2], r[i + 3]), id = a < b ? a + '|' + b : b + '|' + a;
         if (seen.has(id)){ bieg = false; continue; }
         seen.add(id); if (!bieg){ dd += 'M' + r[i].toFixed(1) + ' ' + (-r[i + 1]).toFixed(1); bieg = true; }
         dd += 'L' + r[i + 2].toFixed(1) + ' ' + (-r[i + 3]).toFixed(1);
-      } }
-    document.getElementById('l-oddz').innerHTML = `<path class='oddz' d='${dd}'/><path class='oddz2' d='${dd}'/>`; }
+      }
+      if (dd){ const kl = Math.floor(f.bb[0] / 3000) + '_' + Math.floor(f.bb[1] / 3000); kafle.set(kl, (kafle.get(kl) || '') + dd); } }
+    const dl = [...kafle.values()];
+    document.getElementById('l-oddz').innerHTML = dl.map(d => `<path class='oddz' d='${d}'/>`).join('') + dl.map(d => `<path class='oddz2' d='${d}'/>`).join(''); }
   document.getElementById('l-les').innerHTML = pth(G.les, 'les');
   document.getElementById('l-labO').innerHTML = G.oddz.filter(f => f.lp).map(f => `<text x='${f.lp.x.toFixed(1)}' y='${(-f.lp.y).toFixed(1)}'>${esc(f.odd)}</text>`).join('');
   // litera wydzielenia, pod nią kreska i powierzchnia w ha (v22); wnętrze skaluje się CSS-em po --vm, żeby napis miał stały rozmiar na ekranie
   const powW = f => { const s = ((M.tax[f.k] || {}).sub || [])[0] || {}; return D(s.sub_area) || D(f.a.sub_area) || 0; };
-  document.getElementById('l-labW').innerHTML = G.wydz.filter(f => f.lp && f.lit).map(f => {
+  G.widok = ''; G.labW = f => {
     const pw = powW(f);
     return `<g transform='translate(${f.lp.x.toFixed(1)} ${(-f.lp.y).toFixed(1)})'><g class='lw'>` +
       `<text y='${pw ? -8 : 0}' font-size='12' stroke-width='3'>${esc(f.lit)}</text>` +
       (pw ? `<path d='M-8 0h16' stroke='#fff' stroke-width='3.2' stroke-linecap='round'/><path d='M-8 0h16' stroke='#222' stroke-width='1'/>` +
         `<text y='8' font-size='9' stroke-width='2.5'>${fn(pw, 2)}</text>` : '') + `</g></g>`;
-  }).join('');
-  const kr = p => `M${p.x.toFixed(2)} ${(-p.y).toFixed(2)}h0`;
-  const t = G.gr.filter(p => p.stab).map(kr).join(''), n = G.gr.filter(p => !p.stab).map(kr).join('');
-  document.getElementById('l-gr').innerHTML = `<path class='gr gr-t' d='${t}'/><path class='gr gr-n' d='${n}'/><path class='gr gr-n2' d='${n}'/><path class='gr gr-wyb' id='grWyb' d=''/>`;
+  };
+  document.getElementById('l-gr').innerHTML = `<path class='gr gr-t' d=''/><path class='gr gr-n' d=''/><path class='gr gr-n2' d=''/><path class='gr gr-wyb' id='grWyb' d=''/>`;
   rysujPk();
-  document.getElementById('l-grLab').innerHTML = G.gr.map(p => `<text x='${p.x.toFixed(1)}' y='${(-p.y).toFixed(1)}'>${esc(p.nr)}</text>`).join('');
+}
+// 10.11: napisy wydzieleń, kamienie i ich numery tylko z bieżącego widoku (rysunek sięga 20% poza ekran); woła to podpisy() po każdym ruchu
+function rysujWWidoku(){
+  const w = document.getElementById('l-labW'), g = document.getElementById('l-gr'), gl = document.getElementById('l-grLab'); if (!w || !g || !gl || !G || !G.labW) return;
+  const r = rozmiar(), dx = r.w * .72 * V.m, dy = r.h * .72 * V.m, x0 = V.cx - dx, x1 = V.cx + dx, y0 = V.cy - dy, y1 = V.cy + dy;
+  const wW = V.m < 2.6, wG = ST.gr && V.m < 1.5, wN = ST.gr && ST.grNr && V.m < .7;
+  const kl = (wW || wG) ? [wW, wG, wN, Math.round(x0), Math.round(y0), Math.round(x1), Math.round(y1)].join(' ') : 'nic';
+  if (kl === G.widok) return; G.widok = kl;
+  const wWid = p => p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1;
+  w.innerHTML = wW ? G.wydz.filter(f => f.lp && f.lit && wWid(f.lp)).map(G.labW).join('') : '';
+  const pk = wG ? G.gr.filter(wWid) : [], kr = p => `M${p.x.toFixed(2)} ${(-p.y).toFixed(2)}h0`;
+  const t = pk.filter(p => p.stab).map(kr).join(''), n = pk.filter(p => !p.stab).map(kr).join('');
+  g.children[0].setAttribute('d', t); g.children[1].setAttribute('d', n); g.children[2].setAttribute('d', n);
+  gl.innerHTML = wN ? pk.map(p => `<text x='${p.x.toFixed(1)}' y='${(-p.y).toFixed(1)}'>${esc(p.nr)}</text>`).join('') : '';
 }
 
 // czerwone kropki: partie kontrolne jesiennych poszukiwań szkodników pierwotnych sosny (przełącznik w ☰)
@@ -907,9 +928,10 @@ function koloruj(){
   const wyb = wybrane();
   for (const f of G.wydz){
     const l = wyb.get(f.k);
-    if (!l){ f.el.setAttribute('class', 'w'); f.el.style.fill = ''; f.el.style.stroke = ''; continue; }
+    if (!l){ if (f.kol){ f.kol = ''; f.el.setAttribute('class', 'w'); f.el.style.fill = ''; f.el.style.stroke = ''; } continue; }
     l.sort((a, b) => ST.cz.get(a.cz) - ST.cz.get(b.cz));
     const kol = kolorCz(l[0].cz), wyk = l.some(p => stanPoz(p) === 'wyk');
+    if (f.kol === kol + wyk) continue; f.kol = kol + wyk;
     f.el.setAttribute('class', 'w ' + (wyk ? 'wyk' : 'plan'));
     f.el.style.fill = kol; f.el.style.stroke = wyk ? '' : kol;
   }
@@ -1079,9 +1101,11 @@ function podpisy(){
   const pkc = document.querySelector('#l-pk .pk-c'), pkk = document.querySelector('#l-pk .pk-k');   // czerwone kropki PK: stały rozmiar na ekranie
   if (pkc){ pkc.style.strokeWidth = (14 * V.m).toFixed(2); pkk.style.strokeWidth = (10 * V.m).toFixed(2); }
   // linia oddziałowa: kreska ok. 4 mm na ekranie przy każdym zoomie (Chrome liczy dasharray w jednostkach mapy); po oddaleniu (V.m > 3) cienka jak dawniej 1,6 px, pełny wzór od V.m < 1,5
-  const od2 = document.querySelector('#l-oddz .oddz2'), od1 = document.querySelector('#l-oddz .oddz');
-  if (od2 && od1){ const t = Math.min(1, Math.max(0, (3 - V.m) / 1.5)); od1.style.strokeWidth = (1.6 + 2.6 * t).toFixed(2); od2.style.strokeWidth = (2 * t).toFixed(2); od2.style.display = t < .05 ? 'none' : ''; od2.style.strokeDasharray = `${(15 * V.m).toFixed(3)} ${(15 * V.m).toFixed(3)}`; }
+  const lod = document.getElementById('l-oddz');
+  if (lod && lod.firstChild && lod.vm !== V.m){ lod.vm = V.m; const t = Math.min(1, Math.max(0, (3 - V.m) / 1.5)), s1 = (1.6 + 2.6 * t).toFixed(2), s2 = (2 * t).toFixed(2), ds = t < .05 ? 'none' : '', da = `${(15 * V.m).toFixed(3)} ${(15 * V.m).toFixed(3)}`;
+    for (const e of lod.children){ if (e.getAttribute('class') === 'oddz') e.style.strokeWidth = s1; else { e.style.strokeWidth = s2; e.style.display = ds; if (!ds) e.style.strokeDasharray = da; } } }
   const pzi = document.getElementById('l-pzI'); if (pzi) pzi.style.display = V.m < 4 ? '' : 'none';   // składnice i mijanki po przybliżeniu
+  rysujWWidoku();
   rysujSzkDyn();
 }
 const ogr = m => Math.min(60, Math.max(.08, m));
@@ -2004,8 +2028,17 @@ document.addEventListener('visibilitychange', async () => {
   ekranStartowy();
   try { MOJE = await idbGet('moje') || []; WPLIKI = (await idbGet('warstwy') || []).map(przygotujWarstwe); } catch (e) { console.warn(e); }
   try {
-    const z = await idbGet('zip');
-    if (z && z.blob){ stan('Otwieram ostatnią paczkę: ' + z.nazwa + '…'); await wczytaj(new File([z.blob], z.nazwa, {lastModified:z.mod}), false); }
+    let md = null; try { md = await idbGet('model'); } catch (e) { console.warn(e); }
+    if (md && md.w === MODEL_W && md.js){
+      stan('Otwieram ostatnią paczkę: ' + md.nazwa + '…');
+      let P = null;
+      try { P = JSON.parse(await md.js.text()); for (const l of P.lay) for (const f of l) if (f.g && f.g.rings) f.g.rings = f.g.rings.map(r => Float64Array.from(r)); } catch (e) { console.warn(e); P = null; }
+      if (P) await wczytaj({name:md.nazwa, lastModified:md.mod, size:0}, false, P);
+    }
+    if (!document.getElementById('svg')){   // brak modelu, nowa wersja strony albo model się nie wczytał: po staremu z ZIP-a
+      const z = await idbGet('zip');
+      if (z && z.blob){ stan('Otwieram ostatnią paczkę: ' + z.nazwa + '…'); await wczytaj(new File([z.blob], z.nazwa, {lastModified:z.mod}), false); }
+    }
   } catch (e) { console.warn(e); }
 })();
 </script>
