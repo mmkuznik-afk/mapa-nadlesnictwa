@@ -39,6 +39,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .droga{fill:none;stroke:#8d6e4f;stroke-width:1.2}
 .ciek{fill:none;stroke:#3a8fd0;stroke-width:1.2}
 .sel{fill:none;stroke:#ff00c8;stroke-width:4}
+.poza{fill:#6a7b8c;fill-opacity:.34;stroke:none}
 /* punkty graniczne (gr_pkt): kropka stałej wielkości na ekranie = odcinek zerowej długości z okrągłym końcem */
 .gr{fill:none;stroke-linecap:round}
 .gr-t{stroke:#6b3fa8;stroke-width:10}
@@ -651,11 +652,11 @@ function szacHtml(s){
 // ---- mapa terenowa (2026-11-03): reszta pisana od nowa pod telefon --------------------------
 let M = null, G = null;
 const V = {cx:0, cy:0, m:5};          // środek widoku (PL-1992) i metry na piksel ekranu
-const ST = {rok:0, cz:new Map(), status:'all', kontrRok:0, pk:false, gr:true, grNr:true, moje:true, zew:false, szk:new Set(), pz:new Set()};
+const ST = {rok:0, cz:new Map(), status:'all', kontrRok:0, pk:false, poza:false, gr:true, grNr:true, moje:true, zew:false, szk:new Set(), pz:new Set()};
 const GPS = {id:null, sledz:false, p:null, k:null};
 let KARTA = null, ARK = '';
 const LS = 'mapaNadl.v1';
-function zapiszUst(){ try { localStorage.setItem(LS, JSON.stringify({rok:ST.rok, cz:[...ST.cz.keys()], status:ST.status, pk:ST.pk, gr:ST.gr, grNr:ST.grNr, moje:ST.moje, zew:ST.zew, szk:[...ST.szk], pz:[...ST.pz]})); } catch (e) {} }
+function zapiszUst(){ try { localStorage.setItem(LS, JSON.stringify({rok:ST.rok, cz:[...ST.cz.keys()], status:ST.status, pk:ST.pk, poza:ST.poza, gr:ST.gr, grNr:ST.grNr, moje:ST.moje, zew:ST.zew, szk:[...ST.szk], pz:[...ST.pz]})); } catch (e) {} }
 function wczytajUst(){ try { return JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) { return null; } }
 function kolorCz(cz){ return PALETA[ST.cz.get(cz) % PALETA.length]; }
 
@@ -733,7 +734,7 @@ function zipSklej(mapa){
   ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, n, true); ev.setUint16(10, n, true); ev.setUint32(12, cdl, true); ev.setUint32(16, off, true);
   return new Blob([...cz, ...cd, ev]);
 }
-const MODEL_W = '82c600ea3fd4';
+const MODEL_W = '6f0661ca743a';
 async function wczytaj(file, zapamietaj, P){
   try {
     stan('Czytam ' + file.name + '…');
@@ -761,13 +762,13 @@ async function wczytaj(file, zapamietaj, P){
       const g = czytajShp(sh), a = czytajDbf(db);
       return przygotuj(g.map((x, i) => ({g:x, a:a[i] || {}})).filter(f => f.g && !f.a._usun && !(f.g.rings && !f.g.rings.length)));   // puste szkice z mLasa (5.11) wywracały wczytanie
     };
-    const [wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt] = P ? P.lay : await Promise.all(['wydz_pol', 'oddz_pol', 'les_pol', 'kom_lin', 'ciek_lin', 'gr_pkt', 'szkic_pol', 'szkic_lin', 'szkic_pkt', 'szkic_pnsw',
-      'sied_pol', 'ocp_pol', 'oprz_pol', 'g_droga', 'komp_lin', 'g_obinfr', 'ol_pkt'].map(L));
+    const [wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt, nadPol] = P ? P.lay : await Promise.all(['wydz_pol', 'oddz_pol', 'les_pol', 'kom_lin', 'ciek_lin', 'gr_pkt', 'szkic_pol', 'szkic_lin', 'szkic_pkt', 'szkic_pnsw',
+      'sied_pol', 'ocp_pol', 'oprz_pol', 'g_droga', 'komp_lin', 'g_obinfr', 'ol_pkt', 'nadl_pol'].map(L));
     if (!wydz.length) throw new Error('W paczce nie ma warstwy wydzieleń (wydz_pol). Potrzebny pełny ZIP z mLasa.');
     // zapis modelu jako tekst JSON (w Blobie), zanim cokolwiek do obiektów dopiszemy. JSON, a nie zapis obiektów wprost:
     // obiekty odtworzone przez IndexedDB zajmowały w pamięci ok. 560 MB, po JSON.parse ok. 6 razy mniej
     if (!P){ try {
-      const js = JSON.stringify({M, naz:NAZLES, lay:[wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt]}, (k, v) => v instanceof Float64Array ? Array.from(v) : v);
+      const js = JSON.stringify({M, naz:NAZLES, lay:[wydz, oddz, les, drogi, cieki, grp, szPol, szLin, szPkt, szPnsw, pSied, pOcp, pOprz, pDroga, pPpoz, pInfra, olPkt, nadPol]}, (k, v) => v instanceof Float64Array ? Array.from(v) : v);
       const bz = await idb(); bz.transaction('p', 'readwrite').objectStore('p').put({w:MODEL_W, nazwa:file.name, mod:file.lastModified, js:new Blob([js])}, 'model');
     } catch (e) { console.warn('Nie zapamiętano modelu', e); } }
     G = {wydz:[], oddz:[], les, drogi, cieki, W:new Map(), O:new Map()};
@@ -778,6 +779,7 @@ async function wczytaj(file, zapamietaj, P){
     for (const f of oddz){ f.k = klucz(f.a.adr_les); if (ADR_LES.test(f.k)){ f.odd = f.k.split('-').slice(4).join('-'); G.oddz.push(f); G.O.set(f.k, f); } }
     G.les = les.filter(f => /^\d+-\d+-\d+-\d+$/.test(klucz(f.a.adr_les)));
     G.bb = bbox(G.wydz);
+    G.nadl = (nadPol || []).filter(f => f.g && f.g.t === 'pol');
     // warstwy z paczki do włączania w ☰ (5.11); pk = skąd obiekt, do karty i kolorów
     const tag = (l, pk, t) => l.filter(f => f.g.t === t && f.bb[2] >= G.bb[0] && f.bb[0] <= G.bb[2] && f.bb[3] >= G.bb[1] && f.bb[1] <= G.bb[3]).map(f => (f.pk = pk, f));
     G.pz = {sied:tag(pSied, 'sied', 'pol'), ochr:[...tag(pOprz, 'oprz', 'pol'), ...tag(pOcp, 'ocp', 'pol')], drogi:tag(pDroga, 'droga', 'lin'),
@@ -804,6 +806,7 @@ async function wczytaj(file, zapamietaj, P){
     if (u && typeof u.gr === 'boolean') ST.gr = u.gr;
     if (u && typeof u.grNr === 'boolean') ST.grNr = u.grNr;
     if (u && typeof u.moje === 'boolean') ST.moje = u.moje;
+    if (u && typeof u.poza === 'boolean') ST.poza = u.poza;
     if (u && typeof u.zew === 'boolean') ST.zew = u.zew;
     ST.szk = new Set((u && Array.isArray(u.szk) ? u.szk : []).filter(id => M.szk[id]));
     ST.pz = new Set((u && Array.isArray(u.pz) ? u.pz : []).filter(id => PACZ.some(p => p.id === id)));
@@ -831,7 +834,7 @@ function budujUklad(){
   document.getElementById('app').innerHTML = `
   <div id='mapa'><svg id='svg' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMidYMid meet'>
     <defs><clipPath id='granica'>${G.les.map(f => `<path d='${f.d}'/>`).join('')}</clipPath></defs>
-    <g id='l-pzS'></g><g id='l-wydz'></g><g id='l-pzO'></g><g id='l-szkP'></g><g id='l-cieki'></g><g id='l-drogi'></g><g id='l-pzD'></g>
+    <g id='l-poza'></g><g id='l-pzS'></g><g id='l-wydz'></g><g id='l-pzO'></g><g id='l-szkP'></g><g id='l-cieki'></g><g id='l-drogi'></g><g id='l-pzD'></g>
     <g id='l-oddz'></g><g id='l-les'></g><g id='l-szkL'></g><g id='l-war'></g><g id='l-sel'></g><g id='l-szkD'></g><g id='l-pzI'></g><g id='l-gr'></g><g id='l-pk'></g><g id='l-moje'></g><g id='l-wyb'></g><g id='l-mier'></g>
     <g id='l-labW' class='lab'></g><g id='l-grLab' class='lab lab-g'></g><g id='l-mojeLab' class='lab lab-m'></g><g id='l-labO' class='lab lab-o'></g><g id='l-cel'></g><g id='l-gps'></g>
   </svg></div>
@@ -849,7 +852,7 @@ function budujUklad(){
   <div class='dol'><div id='mier' class='mier'></div><div id='cel' class='cel' onclick='celPokaz()'></div><div id='gdzie' class='gdzie' onclick='if(GPS.k)otworzKarte(GPS.k)'></div><div id='leg' class='leg'></div></div>
   <div id='ark' class='ark'><div class='uchwyt' onclick='zamknijArk()'></div><button class='x' onclick='zamknijArk()' aria-label='Zamknij'>×</button><div id='arkT'></div></div>`;
   rysujPodklad();
-  rysujPacz(); rysujWarstwy(); rysujMoje(); rysujMier(); rysujSzk(); rysujCel();
+  rysujPoza(); rysujPacz(); rysujWarstwy(); rysujMoje(); rysujMier(); rysujSzk(); rysujCel();
   koloruj();
   podepnijMape();
   dopasuj(G.bb);
@@ -906,6 +909,10 @@ function rysujWWidoku(){
 }
 
 // czerwone kropki: partie kontrolne jesiennych poszukiwań szkodników pierwotnych sosny (przełącznik w ☰)
+function rysujPoza(){   // zasięg nadleśnictwa z dziurami po wszystkich wydzieleniach (evenodd); budowane dopiero po włączeniu
+  const el = document.getElementById('l-poza'); if (!el) return;
+  el.innerHTML = ST.poza && G.nadl && G.nadl.length ? `<path class='poza' fill-rule='evenodd' d='${G.nadl.map(f => f.d).join('')}${G.wydz.map(f => f.d).join('')}'/>` : '';
+}
 function rysujPk(){
   const el = document.getElementById('l-pk'); if (!el) return;
   const d = (G.pk || []).map(p => `M${p.x.toFixed(2)} ${(-p.y).toFixed(2)}h0`).join('');
@@ -1019,6 +1026,7 @@ function panelInfo(kom){
   otworzArk('info', `<h2>${esc(M.nazwa || LESN)}</h2><p>Paczka mLasa z <b>${esc(M.meta.data.toLocaleDateString('pl-PL'))}</b><br><span class='op'>${esc(M.meta.plik)}</span></p>
     ${kom || ''}
     <h3>Warstwy</h3>
+    <label class='przel'><input type='checkbox' ${ST.poza ? 'checked' : ''} ${G.nadl && G.nadl.length ? '' : 'disabled'} onchange='ST.poza=this.checked;zapiszUst();rysujPoza()'> <span class='kw' style='background:#6a7b8c'></span> Grunty poza zasobem LP <span class='op'>${G.nadl && G.nadl.length ? 'm.in. lasy prywatne, pola, wsie, jeziora' : 'brak w paczce'}</span></label>
     <label class='przel'><input type='checkbox' ${ST.pk ? 'checked' : ''} ${G.pk && G.pk.length ? '' : 'disabled'} onchange='ST.pk=this.checked;zapiszUst();rysujPk();podpisy()'> <span class='kw' style='background:#e00000'></span> Szukanie szkodników sosny — PK <span class='op'>${G.pk && G.pk.length ? G.pk.length + ' ' + 'punktów' : 'brak w paczce'}</span></label>
     <label class='przel'><input type='checkbox' ${ST.gr ? 'checked' : ''} onchange='ST.gr=this.checked;zapiszUst();podpisy()'> Punkty graniczne (kamienie) <span class='op'>${G.gr.length}</span></label>
     <label class='przel'><input type='checkbox' ${ST.grNr ? 'checked' : ''} onchange='ST.grNr=this.checked;zapiszUst();podpisy()'> Numery punktów po przybliżeniu</label>
