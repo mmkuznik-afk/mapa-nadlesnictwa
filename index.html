@@ -40,6 +40,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .ciek{fill:none;stroke:#3a8fd0;stroke-width:1.2}
 .sel{fill:none;stroke:#ff00c8;stroke-width:4}
 .poza{fill:#6a7b8c;fill-opacity:.34;stroke:none}
+.dal .w:not(.plan):not(.wyk){stroke-opacity:.4}.dal .droga{stroke-opacity:.45}.dal .ciek{stroke-opacity:.7}
 /* punkty graniczne (gr_pkt): kropka stałej wielkości na ekranie = odcinek zerowej długości z okrągłym końcem */
 .gr{fill:none;stroke-linecap:round}
 .gr-t{stroke:#6b3fa8;stroke-width:10}
@@ -197,7 +198,7 @@ const NAZWY_LESN = {};   // nazwa z paczki (f_forest_range)
 let LESN = ''; let NAZLES = {}; const ADR_LES = /^\d+-\d+-\d+-\d+-/;
 const DZIALY = {POZ:'Użytkowanie', HOD:'Hodowla', OCHRL:'Ochrona lasu', OCHRP:'Ochrona ppoż.', OCHRPR:'Ochrona przyrody', UTRZ:'Utrzymanie', UBOCP:'Uboczne'};
 // nazwy czynności — te same co w kokpicie (pewne wg wiki/pojecia/adres-lesny-i-kody.md, „?” = niepewne)
-const NAZWY = {TWP:'trzebież wczesna', TPP:'trzebież późna', IB:'rębnia zupełna', IIIA:'rębnia częściowa',
+const NAZWY = {TWP:'trzebież wczesna', TPP:'trzebież późna', IB:'rębnia zupełna', IIA:'rębnia gniazdowa zupełna', IIIA:'rębnia częściowa',
   CP:'czyszczenia późne', CW:'czyszczenia wczesne', PIEL:'pielęgnacja upraw', 'MA-PORZ':'porządkowanie powierzchni',
   'O-PROGNŚ':'jesienne poszukiwania', 'O-PROGNF':'pułapki feromonowe', 'O-PROGND':'poszukiwania na drzewach próbnych',
   'ODN-GLEB':'przygotowanie gleby (orka)', 'NAT-WPG':'przygotowanie gleby pod odnowienie naturalne',
@@ -734,7 +735,7 @@ function zipSklej(mapa){
   ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, n, true); ev.setUint16(10, n, true); ev.setUint32(12, cdl, true); ev.setUint32(16, off, true);
   return new Blob([...cz, ...cd, ev]);
 }
-const MODEL_W = 'fa8d4e147b83';
+const MODEL_W = '533777c08408';
 async function wczytaj(file, zapamietaj, P){
   try {
     stan('Czytam ' + file.name + '…');
@@ -1108,7 +1109,11 @@ function podpisy(){
   ml.setAttribute('font-size', (12 * V.m).toFixed(3)); ml.setAttribute('stroke-width', (3 * V.m).toFixed(3));
   ml.setAttribute('transform', `translate(0 ${(-15 * V.m).toFixed(3)})`);
   const pkc = document.querySelector('#l-pk .pk-c'), pkk = document.querySelector('#l-pk .pk-k');   // czerwone kropki PK: stały rozmiar na ekranie
-  if (pkc){ pkc.style.strokeWidth = (14 * V.m).toFixed(2); pkk.style.strokeWidth = (10 * V.m).toFixed(2); }
+  // w oddaleniu kropki PK mniejsze (19.11): przy całym leśnictwie zakrywały zabiegi
+  const pkS = V.m > 12 ? .55 : V.m > 5 ? .75 : 1;
+  if (pkc){ pkc.style.strokeWidth = (14 * pkS * V.m).toFixed(2); pkk.style.strokeWidth = (10 * pkS * V.m).toFixed(2); }
+  // w oddaleniu siatka wydzieleń i drogi przygaszone, żeby zabiegi i linie oddziałowe czytały się kolorem (19.11)
+  const mp = document.getElementById('mapa'), dal = V.m > 8; if (mp && mp.classList.contains('dal') !== dal) mp.classList.toggle('dal', dal);
   // linia oddziałowa: kreska ok. 4 mm na ekranie przy każdym zoomie (Chrome liczy dasharray w jednostkach mapy); po oddaleniu (V.m > 3) cienka jak dawniej 1,6 px, pełny wzór od V.m < 1,5
   const lod = document.getElementById('l-oddz');
   if (lod && lod.firstChild && lod.vm !== V.m){ lod.vm = V.m; const t = Math.min(1, Math.max(0, (3 - V.m) / 1.5)), s1 = (1.6 + 2.6 * t).toFixed(2), s2 = (2 * t).toFixed(2), ds = t < .05 ? 'none' : '', da = `${(15 * V.m).toFixed(3)} ${(15 * V.m).toFixed(3)}`;
